@@ -61,6 +61,67 @@ class Kernel:
             setattr(self, key, value)
         return self
 
+class VRBF(Kernel):
+    """Variant Radial-basis function kernel.
+
+    The VRBF kernel is a stationary kernel. It is a variant RBF kernel to 
+    resolve the ambiguity of preference relations in reward function. 
+
+    Parameters
+    ----------
+    length_scale : float or array with shape (n_features,), default: 1.0
+        The length scale of the kernel. If a float, an isotropic kernel is
+        used. If an array, an anisotropic kernel is used where each dimension
+        of l defines the length-scale of the respective feature dimension.
+    """
+
+    def __init__(self, length_scale=1.0):
+        self.length_scale = length_scale
+
+    @property
+    def anisotropic(self):
+        return np.iterable(self.length_scale) and len(self.length_scale) > 1
+
+    def __call__(self, X, Y=None, initial_point=None):
+        """Return the kernel k(X, Y).
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Y : array, shape (n_samples_Y, n_features), (optional, default=None)
+            Right argument of the returned kernel k(X, Y). If None, k(X, X)
+            if evaluated instead.
+
+        Returns
+        -------
+        K : array, shape (n_samples_X, n_samples_Y)
+            Kernel k(X, Y)
+
+        """
+
+        if Y is None:
+            dists = pdist(X / self.length_scale, metric='sqeuclidean')
+        else:
+            dists = cdist(X / self.length_scale, Y / self.length_scale,
+                          metric='sqeuclidean')
+        if initial_point is None:
+            initial_point = np.zeros(np.shape(X)[1]).reshape(1,-1)
+        else:
+            initial_point = initial_point.reshape(1,-1)
+        initial_point = np.vstack((initial_point for _ in range(len(X))))
+        a_dists = cdist(X, initial_point, metric='sqeuclidean')
+        a_dists = a_dists + a_dists.transpose()
+        K = np.exp(-.5 * dists)
+        K_ = np.exp(-.5 * a_dists)
+        # convert from upper-triangular matrix to square matrix
+        if Y is None:
+            K = squareform(K)
+            np.fill_diagonal(K, 1)
+        K = K - K_
+        return K
+    
 
 class RBF(Kernel):
     """Radial-basis function kernel.
